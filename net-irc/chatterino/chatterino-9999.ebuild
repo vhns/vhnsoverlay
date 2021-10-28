@@ -58,7 +58,7 @@ src_prepare(){
 src_configure() {
 	local mycmakeargs=(
 				$(if ! use dbus; then
-					echo "-DBUILD_WITH_QT_KEYCHAIN=0"
+					echo "-DBUILD_WITH_QTKEYCHAIN=0"
 				fi)
 				$(if use system-libcommuni; then
 					echo "-DUSE_SYSTEM_LIBCOMMUNI=1"
