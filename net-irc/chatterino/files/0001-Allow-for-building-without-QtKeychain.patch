@@ -1,0 +1,185 @@
+From 2395cef6daf42e65f6d613cec297321e99a9db54 Mon Sep 17 00:00:00 2001
+From: Mm2PL <miau@mail.kotmisia.pl>
+Date: Tue, 26 Oct 2021 19:43:16 +0200
+Subject: [PATCH] Allow for building without QtKeychain
+
+---
+ CMakeLists.txt                            | 32 +++++++++++++----------
+ src/CMakeLists.txt                        |  7 ++++-
+ src/common/Credentials.cpp                | 18 ++++++++++---
+ src/widgets/settingspages/AboutPage.cpp   |  2 ++
+ src/widgets/settingspages/GeneralPage.cpp |  2 +-
+ 5 files changed, 41 insertions(+), 20 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 6b5e7a47..064d2d9b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -15,6 +15,7 @@ option(BUILD_BENCHMARKS "Build the benchmarks for Chatterino" OFF)
+ option(USE_SYSTEM_PAJLADA_SETTINGS "Use system pajlada settings library" OFF)
+ option(USE_SYSTEM_LIBCOMMUNI "Use system communi library" OFF)
+ option(USE_SYSTEM_QTKEYCHAIN "Use system QtKeychain library" OFF)
++option(BUILD_WITH_QTKEYCHAIN "Build Chatterino with support for your system key chain" ON)
+ option(USE_PRECOMPILED_HEADERS "Use precompiled headers" ON)
+ option(BUILD_WITH_QT6 "Use Qt6 instead of default Qt5" OFF)
+ 
+@@ -77,21 +78,24 @@ else()
+     add_subdirectory("${LIBCOMMUNI_ROOT_LIB_FOLDER}" EXCLUDE_FROM_ALL)
+ endif()
+ 
+-# Link QtKeychain statically
+-option(QTKEYCHAIN_STATIC "" ON)
+-
+-if (USE_SYSTEM_QTKEYCHAIN)
+-    find_package(Qt${MAJOR_QT_VERSION}Keychain REQUIRED)
+-else()
+-    set(QTKEYCHAIN_ROOT_LIB_FOLDER "${CMAKE_SOURCE_DIR}/lib/qtkeychain")
+-    if (NOT EXISTS "${QTKEYCHAIN_ROOT_LIB_FOLDER}/CMakeLists.txt")
+-        message(FATAL_ERROR "Submodules probably not loaded, unable to find lib/qtkeychain/CMakeLists.txt")
+-    endif()
+-
+-    add_subdirectory("${QTKEYCHAIN_ROOT_LIB_FOLDER}" EXCLUDE_FROM_ALL)
+-    if (NOT TARGET qt${MAJOR_QT_VERSION}keychain)
+-        message(FATAL_ERROR "qt${MAJOR_QT_VERSION}keychain target was not created :@")
++if (BUILD_WITH_QTKEYCHAIN)
++    # Link QtKeychain statically
++    option(QTKEYCHAIN_STATIC "" ON)
++    if (USE_SYSTEM_QTKEYCHAIN)
++        find_package(Qt${MAJOR_QT_VERSION}Keychain REQUIRED)
++    else()
++        set(QTKEYCHAIN_ROOT_LIB_FOLDER "${CMAKE_SOURCE_DIR}/lib/qtkeychain")
++        if (NOT EXISTS "${QTKEYCHAIN_ROOT_LIB_FOLDER}/CMakeLists.txt")
++            message(FATAL_ERROR "Submodules probably not loaded, unable to find lib/qtkeychain/CMakeLists.txt")
++        endif()
++
++        add_subdirectory("${QTKEYCHAIN_ROOT_LIB_FOLDER}" EXCLUDE_FROM_ALL)
++        if (NOT TARGET qt${MAJOR_QT_VERSION}keychain)
++            message(FATAL_ERROR "qt${MAJOR_QT_VERSION}keychain target was not created :@")
++        endif()
+     endif()
++else()
++    add_definitions(-DNO_QTKEYCHAIN)
+ endif()
+ 
+ find_package(RapidJSON REQUIRED)
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index df792cc9..a898791e 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -504,7 +504,6 @@ target_link_libraries(${LIBRARY_PROJECT}
+         Qt${MAJOR_QT_VERSION}::Concurrent
+ 
+         LibCommuni::LibCommuni
+-        qt${MAJOR_QT_VERSION}keychain
+         Pajlada::Serialize
+         Pajlada::Settings
+         Pajlada::Signals
+@@ -513,6 +512,12 @@ target_link_libraries(${LIBRARY_PROJECT}
+         RapidJSON::RapidJSON
+         LRUCache
+         )
++if (!NO_QTKEYCHAIN)
++    target_link_libraries(${LIBRARY_PROJECT}
++            PUBLIC
++            qt${MAJOR_QT_VERSION}keychain
++            )
++endif()
+ 
+ if (BUILD_APP)
+     add_executable(${EXECUTABLE_PROJECT} main.cpp)
+diff --git a/src/common/Credentials.cpp b/src/common/Credentials.cpp
+index 42ffb481..5913e0d0 100644
+--- a/src/common/Credentials.cpp
++++ b/src/common/Credentials.cpp
+@@ -9,10 +9,12 @@
+ #include <QJsonDocument>
+ #include <QJsonObject>
+ 
+-#ifdef CMAKE_BUILD
+-#    include "qt5keychain/keychain.h"
+-#else
+-#    include "keychain.h"
++#ifndef NO_QTKEYCHAIN
++#    ifdef CMAKE_BUILD
++#        include "qt5keychain/keychain.h"
++#    else
++#        include "keychain.h"
++#    endif
+ #endif
+ #include <QSaveFile>
+ #include <boost/variant.hpp>
+@@ -28,6 +30,9 @@ namespace chatterino {
+ namespace {
+     bool useKeyring()
+     {
++#ifdef NO_QTKEYCHAIN
++        return false;
++#endif
+         if (getPaths()->isPortable())
+         {
+             return false;
+@@ -104,6 +109,7 @@ namespace {
+ 
+     static void runNextJob()
+     {
++#ifndef NO_QTKEYCHAIN
+         auto &&queue = jobQueue();
+ 
+         if (!queue.empty())
+@@ -140,6 +146,7 @@ namespace {
+ 
+             queue.pop();
+         }
++#endif
+     }
+ 
+     static void queueJob(Job &&job)
+@@ -174,6 +181,8 @@ void Credentials::get(const QString &provider, const QString &name_,
+ 
+     if (useKeyring())
+     {
++#ifndef NO_QTKEYCHAIN
++        // if NO_QTKEYCHAIN is set, then this code is never used either way
+         auto job = new QKeychain::ReadPasswordJob("chatterino");
+         job->setAutoDelete(true);
+         job->setKey(name);
+@@ -184,6 +193,7 @@ void Credentials::get(const QString &provider, const QString &name_,
+             },
+             Qt::DirectConnection);
+         job->start();
++#endif
+     }
+     else
+     {
+diff --git a/src/widgets/settingspages/AboutPage.cpp b/src/widgets/settingspages/AboutPage.cpp
+index 451bbccc..ddd896b9 100644
+--- a/src/widgets/settingspages/AboutPage.cpp
++++ b/src/widgets/settingspages/AboutPage.cpp
+@@ -140,9 +140,11 @@ AboutPage::AboutPage()
+             addLicense(form.getElement(), "Websocketpp",
+                        "https://www.zaphoyd.com/websocketpp/",
+                        ":/licenses/websocketpp.txt");
++#ifndef NO_QTKEYCHAIN
+             addLicense(form.getElement(), "QtKeychain",
+                        "https://github.com/frankosterfeld/qtkeychain",
+                        ":/licenses/qtkeychain.txt");
++#endif
+             addLicense(form.getElement(), "lrucache",
+                        "https://github.com/lamerman/cpp-lru-cache",
+                        ":/licenses/lrucache.txt");
+diff --git a/src/widgets/settingspages/GeneralPage.cpp b/src/widgets/settingspages/GeneralPage.cpp
+index 3546c6be..2cb222ee 100644
+--- a/src/widgets/settingspages/GeneralPage.cpp
++++ b/src/widgets/settingspages/GeneralPage.cpp
+@@ -588,7 +588,7 @@ void GeneralPage::initLayout(GeneralPageView &layout)
+ 
+     layout.addCheckbox("Restart on crash", s.restartOnCrash);
+ 
+-#ifdef Q_OS_LINUX
++#if defined(Q_OS_LINUX) && !defined(NO_QTKEYCHAIN)
+     if (!getPaths()->isPortable())
+     {
+         layout.addCheckbox(
+-- 
+2.31.0
+

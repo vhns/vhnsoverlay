@@ -19,7 +19,7 @@ fi
 LICENSE="MIT"
 SLOT="0"
 
-IUSE="streamlink pulseaudio gst-plugins-good" # dbus" idk kev
+IUSE="streamlink pulseaudio gst-plugins-good dbus system-libcommuni system-qtkeychain"
 
 
 RDEPEND="
@@ -32,19 +32,40 @@ RDEPEND="
 	streamlink? ( net-misc/streamlink )
 	pulseaudio? ( media-libs/pulseaudio-qt )
 	gst-plugins-good? ( media-libs/gst-plugins-good )
-	dev-qt/qtdbus "
+	dbus? ( sys-apps/dbus )
+	system-libcommuni? ( net-im/libcommuni )
+	system-qtkeychain? ( dev-libs/qtkeychain )
+	"
 
 BDEPEND="dev-util/cmake dev-vcs/git dev-qt/qtsvg ${DEPEND}"
 DEPEND="${DEPEND}"
 
-src_compile() {
-	cd "${WORKDIR}/chatterino-9999" # this might fuckup
-	mkdir -p build # not sure you need to do this
-	cd build
-	cmake ..
-	emake
+CMAKE_MAKEFILE_GENERATOR=emake
+
+pkg_pretend(){
+	if use dbus && use system-qtkeychain; then
+		eerror "systemd-qtkeychain and -dbus are mutually exclusive"
+		die
+	fi
 }
 
-src_install() {
-	cmake_src_install
+src_prepare(){
+	use dbus || eapply  "${FILESDIR}/0001-Allow-for-building-without-QtKeychain.patch"
+	eapply_user
+	cmake_src_prepare
+}
+
+src_configure() {
+	local mycmakeargs=(
+				$(if ! use dbus; then
+					echo "-DBUILD_WITH_QT_KEYCHAIN=0"
+				fi)
+				$(if use system-libcommuni; then
+					echo "-DUSE_SYSTEM_LIBCOMMUNI=1"
+				fi)
+				$(if use system-qtkeychain; then
+					echo "-DUSE_SYSTEM_QTKEYCHAIN=1"
+				fi)
+			)
+	cmake_src_configure
 }
