@@ -50,7 +50,6 @@ pkg_pretend(){
 }
 
 src_prepare(){
-	use dbus || eapply  "${FILESDIR}/0001-Allow-for-building-without-QtKeychain.patch"
 	eapply_user
 	cmake_src_prepare
 }
