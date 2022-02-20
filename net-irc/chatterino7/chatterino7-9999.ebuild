@@ -6,7 +6,7 @@ EAPI=7
 inherit cmake xdg-utils
 
 DESCRIPTION='A fork of Chatterino2 with built-in support for 7tv emotes'
-HOMEPAGE="https://chatterino.com"
+HOMEPAGE="https://7tv.app"
 
 if [[ ${PV} = 9999 ]]; then
 	inherit git-r3
