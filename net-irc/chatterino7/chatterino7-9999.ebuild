@@ -19,7 +19,7 @@ fi
 LICENSE="MIT"
 SLOT="0"
 
-IUSE="streamlink pulseaudio gst-plugins-good dbus system-libcommuni system-qtkeychain"
+IUSE="streamlink pulseaudio gst-plugins-good dbus system-libcommuni system-qtkeychain webp"
 
 
 RDEPEND="
@@ -35,6 +35,7 @@ RDEPEND="
 	dbus? ( sys-apps/dbus )
 	system-libcommuni? ( net-im/libcommuni )
 	system-qtkeychain? ( dev-libs/qtkeychain )
+	webp? ( dev-qt/qtimageformats )
 	"
 
 BDEPEND="dev-util/cmake dev-vcs/git dev-qt/qtsvg ${DEPEND}"
